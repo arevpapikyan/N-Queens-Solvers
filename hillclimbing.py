@@ -1,8 +1,7 @@
-import pandas as pd
 import random
 import sys
-import copy
 import time
+import statistics
 
 # Set recursion limit to avoid stack overflow
 sys.setrecursionlimit(5000)
@@ -23,76 +22,102 @@ def countAttacks(coordinates):
     count = 0
     for i in range(len(coordinates)):
         for j in range(len(coordinates)):
-            if abs(coordinates[i][0] - coordinates[j][0]) == abs(coordinates[i][1] - coordinates[j][1]) and coordinates[i] != coordinates[j]:
-                count += 1  # Diagonal attack
-            if coordinates[i][0] == coordinates[j][0] and coordinates[i] != coordinates[j]:
-                count += 1  # Horizontal attack
+            if (abs(coordinates[i][0] - coordinates[j][0]) == abs(coordinates[i][1] - coordinates[j][1]) and coordinates[i] != coordinates[j]):
+                # Diagonal attack
+                count += 0.5
+            if (coordinates[i][0] == coordinates[j][0] and coordinates[i] != coordinates[j]):
+                # Horizontal attack
+                count += 0.5
+            # The function placeQueens doesn't add queens on the same column => there can't be vertical attacks
     return count
 
-def generateSuccessors(coordinates):
+def hillClimbing(coordinates):
     """
-    Generate successors for a given board state.
+    Basic Hill Climbing algorithm for the N-Queens problem.
     """
-    successors = []
-    for i in range(len(coordinates)):
-        current_column = coordinates[i][1]
-        for j in range(n):
-            if j != coordinates[i][0]:  # Avoid placing a queen in the same row
-                new_state = copy.deepcopy(coordinates)
-                new_state[i] = [j, current_column]
-                successors.append(new_state)
-    return successors
+    if countAttacks(coordinates) != 0:
+        chosenCoordinate = random.randint(0, len(coordinates) - 1)
+        move = random.choice([-1, 1])
+        coordinates2 = coordinates[:]
+        if (coordinates2[chosenCoordinate][0] + move < len(coordinates) and coordinates2[chosenCoordinate][0] + move >= 0):
+            coordinates2[chosenCoordinate][0] += move
+        else:
+            coordinates2[chosenCoordinate][0] -= move
+        if countAttacks(coordinates2) < countAttacks(coordinates):
+            hillClimbing(coordinates2)
+    if (countAttacks(coordinates) == 0):
+        return coordinates
+    return []
 
-def k_smallest(lst, attacks, k):
+def hillClimbingWithSidewaysMove(coordinates, sidewaysmoveLimit):
     """
-    Return the k smallest elements from a list.
+    Hill Climbing algorithm with sideways moves for the N-Queens problem.
     """
-    sorted_attacks = sorted(attacks)
-    smallest = []
-    for i in range(k):
-        ind = attacks.index(sorted_attacks[i])
-        if lst[ind] not in smallest:
-            smallest.append(lst[ind])
-    return smallest
-
-def localBeam(k, n):
-    """
-    Local Beam Search algorithm for the N-Queens problem.
-    """
-    def generate_initial_state(n):
-        return [[random.randint(0, n-1), i] for i in range(n)]
-    
-    def is_goal_state(coordinates):
-        return countAttacks(coordinates) == 0
-    
-    def local_beam_search(initial_states, k):
-        current_states = initial_states
-        limit = 100
-        while limit > 0:
+    limit = sidewaysmoveLimit
+    if countAttacks(coordinates) != 0:
+        chosenCoordinate = random.randint(0, len(coordinates) - 1)
+        move = random.choice([-1, 1])
+        coordinates2 = coordinates[:]
+        if (coordinates2[chosenCoordinate][0] + move < len(coordinates) and coordinates2[chosenCoordinate][0] + move >= 0):
+            coordinates2[chosenCoordinate][0] += move
+        else:
+            coordinates2[chosenCoordinate][0] -= move
+        if countAttacks(coordinates2) < countAttacks(coordinates):
+            hillClimbingWithSidewaysMove(coordinates2, limit)
+        elif countAttacks(coordinates2) == countAttacks(coordinates) and limit > 0:
             limit -= 1
-            next_states = []
-            for state in current_states:
-                successors = generateSuccessors(state)
-                for successor in successors:
-                    if is_goal_state(successor):
-                        return successor
-                    next_states.append(successor)
-            attacks = [countAttacks(state) for state in next_states]
-            current_states = k_smallest(next_states, attacks, k)
-        if limit == 0 and 0 not in attacks:
-            return 'no solution was found in 100 steps'
-    
-    initial_states = [generate_initial_state(n) for _ in range(k)]
-    solution = local_beam_search(initial_states, k)
-    if isinstance(solution, list):
-        return pd.DataFrame(coordinatesToBoard(solution)).to_string(index=False, header=False)
-    else:
-        return solution
+            hillClimbingWithSidewaysMove(coordinates2, limit)
+    if (countAttacks(coordinates) == 0):
+        return coordinates
+    return []
 
-n = 5
-k = 5
-start = time.time()
-solution = localBeam(k, n)
-end = time.time()
-print(solution)  # Print solution board
-print(end - start)  # Print time taken
+def hillClimbingWithSidewaysMoveRandomRestarts(coordinates, sidewaysmoveLimit, RandomrestartsLimit):
+    """
+    Hill Climbing algorithm with sideways moves and random restarts for the N-Queens problem.
+    """
+    limit = sidewaysmoveLimit
+    restarts = RandomrestartsLimit
+    if countAttacks(coordinates) != 0:
+        chosenCoordinate = random.randint(0, len(coordinates) - 1)
+        move = random.choice([-1, 1])
+        coordinates2 = coordinates[:]
+        if (coordinates2[chosenCoordinate][0] + move < len(coordinates) and coordinates2[chosenCoordinate][0] + move >= 0):
+            coordinates2[chosenCoordinate][0] += move
+        else:
+            coordinates2[chosenCoordinate][0] -= move
+        if countAttacks(coordinates2) < countAttacks(coordinates):
+            hillClimbingWithSidewaysMoveRandomRestarts(coordinates2, limit, restarts)
+        elif countAttacks(coordinates2) == countAttacks(coordinates) and limit > 0:
+            limit -= 1
+            if limit == 0 and restarts > 0:
+                restarts -= 1
+                new_coordinates = [[random.randint(0, n - 1), i] for i in range(n)]
+                hillClimbingWithSidewaysMoveRandomRestarts(new_coordinates, limit, restarts)
+            hillClimbingWithSidewaysMoveRandomRestarts(coordinates2, limit, restarts)
+    if (countAttacks(coordinates) == 0):
+        return coordinates
+    return []
+
+# Set the number of queens
+n = 6
+solutionCount = 0
+times_solution = []
+times_noSolution = []
+runCount = 5000
+
+# Run the algorithm multiple times
+for _ in range(runCount):
+    coordinates = [[random.randint(0, n - 1), i] for i in range(n)]
+    start = time.time()
+    solution = hillClimbingWithSidewaysMoveRandomRestarts(coordinates, 100, 10)
+    end = time.time()
+    if solution != []:
+        solutionCount += 1
+        times_solution.append(end - start)
+    else:
+        times_noSolution.append(end - start)
+
+# Print results
+print("The algorithm found the solution", solutionCount / runCount * 100, "percent of time")
+print(statistics.mean(times_solution), "- average time spent on finding a solution")
+print(statistics.mean(times_noSolution), "- average time spent till the algorithm asserted it didn't find a solution")
